@@ -1,27 +1,24 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import * as dotenv from 'dotenv';
-import { ArafatService } from 'src/arafat/arafat.service';
-dotenv.config();
+import { Request } from 'express';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private arafatService: ArafatService) {
+  constructor(private configService: ConfigService) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: process.env.JWT_SECRET,
-      passReqToCallback: true, 
+      jwtFromRequest: ExtractJwt.fromExtractors([(req: Request) => req?.cookies?.accessToken]),
+      ignoreExpiration: false,
+      secretOrKey: configService.get<string>('JWT_SECRET'),
     });
+    
   }
 
-  async validate(req: any, payload: any) {
-    const token = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
-
-    if (this.arafatService.isTokenBlacklisted(token)) {
-      throw new UnauthorizedException('Token is blacklisted. Please log in again.');
+  async validate(payload: any) {
+    if (!payload) {
+      throw new UnauthorizedException();
     }
-
-    return { userId: payload.sub, email: payload.email, userType: payload.userType, token };
+    return payload; // Attach decoded user data
   }
 }

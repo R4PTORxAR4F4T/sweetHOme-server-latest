@@ -39,7 +39,6 @@ export class ArafatService {
     const salt = await bcrypt.genSalt();
     const hashedPassword = await bcrypt.hash(data.password, salt);
     data.password = hashedPassword;
-    const message = "user created successful"
   
     this.userRepository.save(data);
 
@@ -371,7 +370,11 @@ export class ArafatService {
     const hashedPassword = await bcrypt.hash(data.password, salt);
     data.password = hashedPassword;
 
-    return this.userRepository.save(data);
+    this.userRepository.save(data)
+    
+    return {
+      message: "User Created Successfully"
+    };
   }
 
   getUser(id){
