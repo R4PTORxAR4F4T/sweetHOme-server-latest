@@ -6,6 +6,7 @@ import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { Twilio } from 'twilio';
 
 
 @Injectable()
@@ -13,6 +14,7 @@ export class ArafatService {
 
   private otpStorage: Map<string, { otp: string; expiresAt: Date }> = new Map();
   private verified: boolean;
+  private twilioClient: Twilio;
 
 
   constructor(
@@ -23,7 +25,11 @@ export class ArafatService {
     @InjectRepository(Property) private propertyRepository: Repository<Property>,
     @InjectRepository(User) private userRepository: Repository<User>,
     private jwtService: JwtService,
-  ) {}
+  ) {
+    this.twilioClient = new Twilio(
+      process.env.TWILIO_ACCOUNT_SID,
+      process.env.TWILIO_AUTH_TOKEN);
+  }
 
   // ==========================================
   // ============    login    =================
@@ -90,77 +96,121 @@ export class ArafatService {
   
 
 
-
-
-
-  
   async sendOtpToUser(email: string) {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // OTP expires in 5 minutes
-    this.otpStorage.set(email, { otp, expiresAt });
-  
+
     try {
-      const row = await this.userRepository.findOne({ where: { email: email } });
-      if (!row) {
-        return "Request Declined: Account cannot be found.";
-      }
-      const data = { otp, expiresAt };
-      const newData = Object.assign(row, data);
-      await this.userRepository.save(newData);
-  
-      console.log(`OTP sent to ${email}: ${otp}`);
-      return { message: `OTP sent successfully to ${email}` };
+        const row = await this.userRepository.findOne({ where: { email } });
+
+        if (!row || !row.number) {
+            return { message: "Request Declined: Account or phone number not found." };
+        }
+
+        await this.userRepository.update({ email }, { otp, expiresAt });
+
+        // Debug: Log the raw phone number from the database
+        let phoneNumber = String(row.number).trim();
+        console.log("Raw phone number from DB:", phoneNumber);
+
+        // Ensure phone number is in E.164 format for Bangladesh (+880)
+        if (!phoneNumber.startsWith("0") && !phoneNumber.startsWith("+880")) {
+            phoneNumber = `0${phoneNumber}`; // Add leading zero if missing
+        }
+
+        if (phoneNumber.startsWith("0")) {
+            phoneNumber = `+880${phoneNumber.slice(1)}`; // Convert "01850477967" -> "+8801850477967"
+        }
+
+        // Debug: Log the formatted phone number before sending
+        console.log("Formatted phone number:", phoneNumber);
+
+        // Validate number format
+        if (!/^\+\d{10,15}$/.test(phoneNumber)) {
+            throw new Error(`Invalid phone number format: ${phoneNumber}`);
+        }
+
+        // Send OTP via Twilio SMS
+        await this.twilioClient.messages.create({
+            body: `Your OTP code is: ${otp}. It expires in 5 minutes.`,
+            from: process.env.TWILIO_PHONE_NUMBER,
+            to: phoneNumber,
+        });
+
+        console.log(`OTP sent to ${phoneNumber}: ${otp}`);
+
+        return { message: `OTP sent successfully to ${phoneNumber}` };
     } catch (error) {
-      console.error('Failed to send OTP:', error.message);
-      throw new Error('Failed to send OTP');
+        console.error("Failed to send OTP:", error.message);
+        throw new Error("Failed to send OTP");
     }
   }
+
   
   async verifyOtp(email: string, otp: string) {
-    const storedOtpData = this.otpStorage.get(email);
+    try {
+        // Fetch OTP data from the database
+        const user = await this.userRepository.findOne({ where: { email } });
 
-    if (!storedOtpData) {
-        return { verified: false, message: 'Invalid or expired OTP' };
-    }
-    const { otp: storedOtp, expiresAt } = storedOtpData;
-    if (new Date() > expiresAt) {
-        this.otpStorage.delete(email);
-        return { verified: false, message: 'OTP expired' };
-    }
-    if (storedOtp !== otp) {
-        return { verified: false, message: 'Invalid OTP' };
-    }
+        if (!user || !user.otp || !user.expiresAt) {
+            return { verified: false, message: 'Invalid or expired OTP' };
+        }
 
-    this.verified= true;
-    return { verified: true, message: 'OTP verified successfully. You may reset your password now.' };
+        // Check if OTP is expired
+        const expiresAt = new Date(user.expiresAt);
+        if (new Date() > expiresAt) {
+            await this.userRepository.update({ email }, { otp: null, expiresAt: new Date(0) }); // Set to past date instead of null
+            return { verified: false, message: 'OTP expired' };
+        }
+
+        // Check if OTP matches
+        if (user.otp !== otp) {
+            return { verified: false, message: 'Invalid OTP' };
+        }
+
+        // OTP is valid; clear it from the database
+        await this.userRepository.update({ email }, { otp: null, expiresAt: new Date(0) }); // Expired timestamp instead of null
+
+        return { verified: true, message: 'OTP verified successfully. You may reset your password now.' };
+    } catch (error) {
+        console.error("Failed to verify OTP:", error.message);
+        throw new Error("Failed to verify OTP");
+    }
   }
 
 
   async resetPassword(email: string, newPassword: string) {
-    const storedOtpData = this.otpStorage.get(email);
-    if (!this.verified) {
-        return { success: false, message: 'Password reset not allowed. Verify OTP first.' };
-    }
     try {
+        // Fetch user from database
         const user = await this.userRepository.findOne({ where: { email } });
+
         if (!user) {
             return { success: false, message: 'User not found.' };
         }
+
+        // Ensure OTP was verified (OTP should be null if already used)
+        if (user.otp !== null) {
+            return { success: false, message: 'Password reset not allowed. Verify OTP first.' };
+        }
+
+        // Hash the new password
         const hashedPassword = await bcrypt.hash(newPassword, 10);
-        user.password = hashedPassword;
-        await this.userRepository.save(user);
+
+        // Update user's password and remove OTP details
+        await this.userRepository.update(
+            { email },
+            { password: hashedPassword, otp: null, expiresAt: new Date(0) } // Clear OTP data
+        );
+
+        // Cleanup any stored OTP in memory (if used for temporary verification)
         this.otpStorage.delete(email);
+
         return { success: true, message: 'Password reset successfully.' };
     } catch (error) {
         console.error('Failed to reset password:', error.message);
         throw new Error('Failed to reset password');
     }
   }
-
-  
-
-
-
 
 
   async getUserById(userId: number) {
@@ -177,8 +227,6 @@ export class ArafatService {
     }
   }
   
-
-
 
   // ==========================================
   // ============    chat    ==================
@@ -315,7 +363,7 @@ export class ArafatService {
   // =========================
 
   getAllproperty(){
-    return this.propertyRepository.find();//{where:{verifyStatus:"pending"}}
+    return this.propertyRepository.find({where:{verifyStatus:"pending"}});//
   }
 
   getproperty(id){
@@ -323,6 +371,8 @@ export class ArafatService {
   }
 
   async updateProperty(id, data){
+
+    console.log(data)
     const row = await this.propertyRepository.findOne({where:{verifyId : id}});
 
     if(!row)

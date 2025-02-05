@@ -170,6 +170,9 @@ import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeor
     otp: string;
 
     @CreateDateColumn()
+    expiresAt: Date;
+
+    @CreateDateColumn()
     createdAt: Date;
   }
 

@@ -137,7 +137,7 @@ export class ArafatController {
   
     // @Post('/createticket')
     // @UseGuards(AuthGuard('jwt'))
-    // async createTicket(@Request() req) {
+    // async createTicket(@Req() req: Request) {
     //     try {
     //         return await this.arafatService.createTicket(req.user.userId);
     //     } catch (error) {
@@ -156,28 +156,37 @@ export class ArafatController {
     //     }
     // }
   
-    // @Get('/activeticket')
-    // @UseGuards(AuthGuard('jwt'))
-    // async getAllOpenticket(@Request() req) {
-    //     try {
-    //         if (req.user.userType !== 'admin') {
-    //             throw new Error('Access Denied : Admin access required to user this end point');
-    //         }
-    //         return await this.arafatService.getAllOpenticket();
-    //     } catch (error) {
-    //         return { message: error.message };
-    //     }
-    // }
+    @Get('/activeticket')
+    @UseGuards(AuthGuard('jwt'))
+    async getAllOpenticket(@Req() req: Request) {
+        try {
+            const userInfo = JSON.parse(req.cookies.userInfo);
+            
+            if (userInfo.userType !== 'admin') {
+                throw new HttpException('Access Denied: Admin access required to use this endpoint.', HttpStatus.FORBIDDEN);
+            }
+            return await this.arafatService.getAllOpenticket();
+        } catch (error) {
+            return { message: error.message };
+        }
+    }
   
-    // @Get('/ticketchat/:id')
-    // @UseGuards(AuthGuard('jwt'))
-    // async getTicketChat(@Param('id') id) {
-    //     try {
-    //         return await this.arafatService.getTicketChat(id);
-    //     } catch (error) {
-    //         return { message: error.message };
-    //     }
-    // }
+    @Get('/ticketchat/:id')
+    @UseGuards(AuthGuard('jwt'))
+    async getTicketChat(@Req() req: Request,@Param('id') id) {
+        try {
+
+            // const userInfo = JSON.parse(req.cookies.userInfo);
+            
+            // if (userInfo.userType !== 'admin') {
+            //     throw new HttpException('Access Denied: Admin access required to use this endpoint.', HttpStatus.FORBIDDEN);
+            // }
+
+            return await this.arafatService.getTicketChat(id);
+        } catch (error) {
+            return { message: error.message };
+        }
+    }
   
     // @Patch('/updateticket/:id')
     // @UseGuards(AuthGuard('jwt'))
@@ -222,57 +231,57 @@ export class ArafatController {
     // // ============    property    ==============
     // // ==========================================
   
-    // @Get('/allproperty')
-    // @UseGuards(AuthGuard('jwt'))
-    // async getAllproperty(@Request() req) {
-    //     try {
-    //         if (req.user.userType !== 'admin') {
-    //             throw new Error('Access Denied : Admin access required to user this end point');
-    //         }
-    //         return await this.arafatService.getAllproperty();
-    //     } catch (error) {
-    //         return { message: error.message };
-    //     }
-    // }
+    @Get('/allproperty')
+    @UseGuards(AuthGuard('jwt'))
+    async getAllproperty(@Req() req: Request) {
+        try {
+            const userInfo = JSON.parse(req.cookies.userInfo);
+            
+            if (userInfo.userType !== 'admin') {
+                throw new HttpException('Access Denied: Admin access required to use this endpoint.', HttpStatus.FORBIDDEN);
+            }
+
+            return await this.arafatService.getAllproperty();
+        } catch (error) {
+            throw new HttpException(error.message, error.status || HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
   
-    // @Get('/allproperty/:id')
-    // @UseGuards(AuthGuard('jwt'))
-    // async getproperty(@Request() req,@Param('id') id) {
-    //     try {
-    //         if (req.user.userType !== 'admin') {
-    //             throw new Error('Access Denied : Admin access required to user this end point');
-    //         }
-    //         return await this.arafatService.getproperty(id);
-    //     } catch (error) {
-    //         return { message: error.message };
-    //     }
-    // }
+    @Get('/allproperty/:id')
+    @UseGuards(AuthGuard('jwt'))
+    async getproperty(@Req() req: Request,@Param('id') id) {
+        try {
+            const userInfo = JSON.parse(req.cookies.userInfo);
+            
+            if (userInfo.userType !== 'admin') {
+                throw new HttpException('Access Denied: Admin access required to use this endpoint.', HttpStatus.FORBIDDEN);
+            }
+            return await this.arafatService.getproperty(id);
+        } catch (error) {
+            return { message: error.message };
+        }
+    }
   
-    // @Patch('/allproperty/:id')
-    // @UseGuards(AuthGuard('jwt'))
-    // async updateProperty(@Request() req,@Param('id') id, @Body() data) {
-    //     try {
-    //         if (req.user.userType !== 'admin') {
-    //             throw new Error('Access Denied : Admin access required to user this end point');
-    //         }
-    //         return await this.arafatService.updateProperty(id, data);
-    //     } catch (error) {
-    //         return { message: error.message };
-    //     }
-    // }
+    @Patch('/allproperty/:id')
+    @UseGuards(AuthGuard('jwt'))
+    async updateProperty(@Req() req: Request,@Param('id') id, @Body() data) {
+        try {
+            const userInfo = JSON.parse(req.cookies.userInfo);
+            
+            if (userInfo.userType !== 'admin') {
+                throw new HttpException('Access Denied: Admin access required to use this endpoint.', HttpStatus.FORBIDDEN);
+            }
+            return await this.arafatService.updateProperty(id, data);
+        } catch (error) {
+            return { message: error.message };
+        }
+    }
   
-    // // ==========================================
-    // // ============    user    ==================
-    // // ==========================================
-  
-    // // @Get('/alluser')
-    // // async getAllUser() {
-    // //   try {
-    // //     return await this.arafatService.getAllUser();
-    // //   } catch (error) {
-    // //     return { message: error.message };
-    // //   }
-    // // }
+    // ==========================================
+    // ============    user    ==================
+    // ==========================================
+
   
     @Get('/alluser')
     @UseGuards(AuthGuard('jwt'))
